@@ -6,7 +6,9 @@
   <title>二维码扫描与展示</title>
   <!-- 使用国内 CDN，避免加载慢 -->
   <script src="https://cdn.bootcdn.net/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-  <script src="https://cdn.bootcdn.net/ajax/libs/qrcode.js/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- vConsole 移动端调试工具 -->
+  <script src="https://cdn.bootcdn.net/ajax/libs/vConsole/3.15.1/vconsole.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -214,18 +216,33 @@
       }
 
       qrcodeElement.innerHTML = ""; // 清空
-      new QRCode(qrcodeElement, {
-        text: savedData,
-        width: 200,
-        height: 200,
-        colorDark: "#000",
-        colorLight: "#fff"
-      });
-      alert("✅ 二维码已生成！");
+      
+      try {
+        // 使用qrcodejs库的正确API
+        new QRCode(qrcodeElement, {
+          text: savedData,
+          width: 200,
+          height: 200,
+          colorDark: "#000000",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.H
+        });
+        
+        alert("✅ 二维码已生成！");
+      } catch (error) {
+        console.error('生成二维码失败:', error);
+        alert("❌ 生成二维码失败！");
+      }
     }
 
     // 页面加载完成后初始化
     window.addEventListener("DOMContentLoaded", () => {
+      // 初始化 vConsole
+      if (typeof VConsole !== 'undefined') {
+        new VConsole();
+        console.log('vConsole已启动 - 点击右下角绿色图标查看调试信息');
+      }
+      
       // 延迟启动，确保 DOM 就绪
       setTimeout(initScanner, 500);
     });
