@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>二维码扫描与展示</title>
+  <!-- 使用国内 CDN，避免加载慢 -->
+  <script src="https://cdn.bootcdn.net/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/qrcode.js/1.0.0/qrcode.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #f7f7f7;
+      color: #333;
+    }
+    h1 {
+      font-size: 1.5em;
+      text-align: center;
+      margin-bottom: 20px;
+      color: #1a73e8;
+    }
+    #reader {
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .result {
+      margin: 15px 0;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background-color: #fff;
+      word-break: break-all;
+    }
+    .result strong {
+      color: #1a73e8;
+    }
+    button {
+      padding: 12px 20px;
+      font-size: 16px;
+      margin: 10px 5px;
+      cursor: pointer;
+      background-color: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    button:hover:not(:disabled) {
+      background-color: #1557b0;
+    }
+    .qrcode-container {
+      margin: 20px 0;
+      text-align: center;
+    }
+    canvas {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 6px;
+      background: #fff;
+    }
+    .error {
+      color: #d32f2f;
+      font-size: 14px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>二维码扫描与展示</h1>
+
+  <!-- 扫描区域 -->
+  <div id="reader"></div>
+  <div class="error" id="error-message"></div>
+
+  <div class="result">
+    <strong>扫描结果：</strong>
+    <span id="scan-result">等待扫描...</span>
+  </div>
+
+  <button onclick="saveToLocalStorage()">💾 保存到本地</button>
+  <button onclick="showGeneratedQr()">🖼 显示二维码</button>
+
+  <!-- 生成的二维码显示区域 -->
+  <div class="qrcode-container">
+    <div id="qrcode"></div>
+  </div>
+
+  <script>
+    const scanResultElement = document.getElementById("scan-result");
+    const qrcodeElement = document.getElementById("qrcode");
+    const errorMessage = document.getElementById("error-message");
+    let scanner = null;
+    let scannerStarted = false;
+
+    // 初始化扫描器（兼容性优先）
+    function initScanner() {
+      if (scannerStarted) return;
+      clearError();
+
+      scanner = new Html5Qrcode("reader");
+
+      const config = {
+        fps: 10,
+        // 不设置 qrbox，避免 OverconstrainedError
+        // qrbox: 250,
+        disableFlip: true  // 移动端通常不需要自动翻转
+      };
+
+      // 尝试使用后置摄像头，失败则自动降级
+      const cameraConfig = { facingMode: "environment" }; // 后置优先
+
+      scanner.start(
+        cameraConfig,
+        config,
+        (decodedText) => {
+          scanResultElement.textContent = decodedText;
+          scannerStarted = true;
+          scanner.stop().catch(console.warn);
+        },
+        (err) => {
+          // 扫描过程中的日志，可忽略
+          console.log("扫描中:", err);
+        }
+      ).then(() => {
+        scannerStarted = true;
+      }).catch((err) => {
+        handleError("启动失败: " + getErrorMessage(err), err);
+        
+        // 降级：尝试不指定摄像头
+        setTimeout(() => {
+          console.log("尝试降级配置...");
+          startWithAnyCamera();
+        }, 1500);
+      });
+    }
+
+    // 降级：使用任意可用摄像头
+    function startWithAnyCamera() {
+      if (scannerStarted) return;
+
+      scanner.start(
+        "video",
+        { fps: 10 },
+        (decodedText) => {
+          scanResultElement.textContent = decodedText;
+          scannerStarted = true;
+          scanner.stop().catch(console.warn);
+        },
+        (err) => { console.log("降级扫描中:", err); }
+      ).catch((err) => {
+        handleError("所有摄像头均不可用: " + getErrorMessage(err));
+      });
+    }
+
+    // 统一错误处理
+    function handleError(msg, err) {
+      errorMessage.textContent = msg;
+      console.error("摄像头错误:", err);
+    }
+
+    function clearError() {
+      errorMessage.textContent = "";
+    }
+
+    // 友好错误提示
+    function getErrorMessage(err) {
+      if (err.name === "NotAllowedError") {
+        return "请允许摄像头权限";
+      } else if (err.name === "NotFoundError") {
+        return "未检测到摄像头";
+      } else if (err.name === "NotReadableError") {
+        return "摄像头被占用或不可用";
+      } else if (err.name === "OverconstrainedError") {
+        return "摄像头配置不支持（分辨率/设备）";
+      } else if (err.name === "AbortError") {
+        return "扫描中止";
+      } else {
+        return err.message || String(err);
+      }
+    }
+
+    // 保存到 localStorage
+    function saveToLocalStorage() {
+      const text = scanResultElement.textContent;
+      if (!text || text === "等待扫描...") {
+        alert("❌ 请先扫描一个二维码！");
+        return;
+      }
+      localStorage.setItem("scannedQrData", text);
+      alert("✅ 数据已保存到本地！");
+    }
+
+    // 显示生成的二维码
+    function showGeneratedQr() {
+      const savedData = localStorage.getItem("scannedQrData");
+      if (!savedData) {
+        alert("❌ 本地没有保存的二维码数据！");
+        return;
+      }
+
+      qrcodeElement.innerHTML = ""; // 清空
+      new QRCode(qrcodeElement, {
+        text: savedData,
+        width: 200,
+        height: 200,
+        colorDark: "#000",
+        colorLight: "#fff"
+      });
+      alert("✅ 二维码已生成！");
+    }
+
+    // 页面加载完成后初始化
+    window.addEventListener("DOMContentLoaded", () => {
+      // 延迟启动，确保 DOM 就绪
+      setTimeout(initScanner, 500);
+    });
+  </script>
+
+</body>
+</html>
